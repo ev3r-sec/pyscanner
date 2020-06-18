@@ -5,8 +5,21 @@
 import socket
 import thread
 import argparse
+import re
 
 resultdic = {}
+
+def checkip(ip):
+    if re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", ip):
+        return True
+    else:
+        return False
+
+def checkport(port):
+    if re.match(r"^(\w+|\w+-\w+)$", port):
+        return True
+    else:
+        return False
 
 def scan(ip, port):
 
@@ -23,19 +36,30 @@ def scan(ip, port):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Input the IP address and PORT number.')
-    parser.add_argument('--ip', type=str, dest='ip',
+    subs = parser.add_subparsers()
+    subs.required = True
+
+    file_parser = subs.add_parser('file', help='scan from a file') 
+    file_parser.add_argument('filename', type=str,  help='input the filename')
+    
+    normal_parser = subs.add_parser('ip', help='scan from ip and port number')
+    normal_parser.add_argument('ip', type=str, 
                         help='IP address')
-    parser.add_argument('--port', type=int, dest='port',
+    normal_parser.add_argument('port', type=str ,
                         help='Port number')
 
     args = parser.parse_args()
-    resultdic[args.ip] = []
-    scan(args.ip, args.port)
 
-    for ip in resultdic:
-        print "Availible ports for " + ip + " are:"
-        for port in resultdic[ip]:
-            print str(port)
+    if 'filename' in args:
+        print "eee"
+    else:
+        resultdic[args.ip] = []
+        scan(args.ip, args.port)
+
+        for ip in resultdic:
+            print "Availible ports for " + ip + " are:"
+            for port in resultdic[ip]:
+                print str(port)
 
 
 
