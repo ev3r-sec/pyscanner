@@ -15,11 +15,18 @@ def checkip(ip):
     else:
         return False
 
-def checkport(port):
-    if re.match(r"^(\w+|\w+-\w+)$", port):
-        return True
+def parseport(port):
+    if port.isdigit() and int(port) > 0 and int(port) < 65535:
+        return [int(port)]
+    if re.match(r"^(\w+-\w+)$", port):
+        lowport = int(port.split('-')[0])
+        highport = int(port.split('-')[1])
+        if lowport < highport:
+            retlist = list(range(lowport,highport))
+            retlist.append(highport)
+            return retlist
     else:
-        return False
+        return []
 
 def scan(ip, port):
 
@@ -50,16 +57,27 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    #  print args
     if 'filename' in args:
         print "eee"
     else:
-        resultdic[args.ip] = []
-        scan(args.ip, args.port)
+        if checkip(args.ip):
+            ip = args.ip
+            resultdic[ip] = []
+            portlist = parseport(args.port)
+            if portlist:
+                #  print portlist
+                for port in portlist:
+                    scan(ip, port)
 
-        for ip in resultdic:
-            print "Availible ports for " + ip + " are:"
-            for port in resultdic[ip]:
-                print str(port)
+                for ip in resultdic:
+                    print "Availible ports for " + ip + " are:"
+                    for port in resultdic[ip]:
+                        print str(port)
+            else:
+                print "Wrong Port number!"
+        else:
+            print "Wrong IP address!"
 
 
 
