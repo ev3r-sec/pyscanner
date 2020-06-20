@@ -7,6 +7,9 @@ import thread
 import argparse
 import re
 
+#  TODO: multithread
+#  TODO: record
+#  TODO: exception
 resultdic = {}
 
 def checkip(ip):
@@ -59,7 +62,23 @@ if __name__ == '__main__':
 
     #  print args
     if 'filename' in args:
-        print "eee"
+        with open(args.filename, 'r') as f:
+            line = f.readline()
+            while line:
+                ip = line.split(' ')[0]
+                port = line.split(' ')[1]
+                portlist = parseport(port)
+                if checkip(ip) and portlist:
+                    resultdic[ip] = []
+                    for port in portlist:
+                        scan(ip, port)
+
+                    for ip in resultdic:
+                        print "Availible ports for " + ip + " are:"
+                        for port in resultdic[ip]:
+                            print str(port)
+                line = f.readline()
+        
     else:
         if checkip(args.ip):
             ip = args.ip
