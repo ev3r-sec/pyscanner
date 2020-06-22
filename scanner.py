@@ -7,6 +7,8 @@ import thread
 import argparse
 import re
 import threading
+import os
+import sys
 
 #  TODO: output
 #  TODO: record
@@ -23,6 +25,8 @@ threads = []
 
 lock = threading.Lock()
 
+timeout = 0.5
+
 def checkip(ip):
     if re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", ip):
         return True
@@ -30,7 +34,7 @@ def checkip(ip):
         return False
 
 def parseport(port):
-    if port.isdigit() and int(port) > 0 and int(port) < 65535:
+    if port.isdigit() and int(port) > 0 and int(port) < 65536:
         return [int(port)]
     if re.match(r"^(\w+-\w+)$", port):
         lowport = int(port.split('-')[0])
@@ -44,7 +48,7 @@ def parseport(port):
 
 def scan(ip, port):
     s = socket.socket()
-    s.settimeout(0.1)
+    s.settimeout(timeout)
     if s.connect_ex((ip, port)) == 0:
         resultdic[ip].append(port)
         #  print 'f'
@@ -56,7 +60,7 @@ def portscanner(addrtuplelist):
     global resultdic
     for addr in addrtuplelist:
         s = socket.socket()
-        s.settimeout(0.1)
+        s.settimeout(timeout)
         if s.connect_ex(addr) == 0:
             lock.acquire()
             resultdic[addr[0]].append(addr[1])
@@ -67,22 +71,27 @@ def portscanner(addrtuplelist):
             pass
 
 def multhreadassign(addrtuplelist):
+    print '-'*60
+    print "Starting pyscanner...."
+    print '-'*60
     tuplelength = len(addrtuplelist)
     threadnum = tuplelength / portnumeachthread 
     if threadnum == 0:
         for addr in addrtuplelist:
-            portscanner(addr)
+            scan(addr[0], addr[1])
     else:
         for i in range(0, threadnum):
             startnum = i * portnumeachthread
             if startnum+20 <= tuplelength:
                 subtuplelist = addrtuplelist[startnum:startnum+20]
                 t = threading.Thread(target=portscanner, args=(subtuplelist,))
+                t.setDaemon(True)
                 threads.append(t)
                 t.start()
             else:
                 subtuplelist = addrtuplelist[startnum:tuplelength-1]
                 t = threading.Thread(target=portscanner, args=(addrtuplelist,))
+                t.setDaemon(True)
                 threads.append(t)
                 t.start()
 
@@ -107,27 +116,30 @@ if __name__ == '__main__':
 
     #  print args
     if 'filename' in args:
-        with open(args.filename, 'r') as f:
-            addrtuplelist = []
-            line = f.readline()
-            while line:
-                ip = line.split(' ')[0] # TODO: other splitter
-                port = line.split(' ')[1]
-                portlist = parseport(port)
-                if checkip(ip) and portlist:
-                    if ip not in resultdic.keys():
-                        resultdic[ip] = []
-                    for port in portlist: # TODO: faster 
-                        if (ip, port) not in addrtuplelist:
-                            addrtuplelist.append((ip, port))
-
-                    #  for ip in resultdic:
-                        #  print "Availible ports for " + ip + " are:"
-                        #  for port in resultdic[ip]:
-                            #  print str(port)
+        try:
+            with open(args.filename, 'r') as f:
+                addrtuplelist = []
                 line = f.readline()
-            #  print addrtuplelist
-            multhreadassign(addrtuplelist)
+                while line:
+                    ip = line.split(' ')[0] # TODO: other splitter
+                    port = line.split(' ')[1]
+                    portlist = parseport(port)
+                    if checkip(ip) and portlist:
+                        if ip not in resultdic.keys():
+                            resultdic[ip] = []
+                        for port in portlist: # TODO: faster 
+                            if (ip, port) not in addrtuplelist:
+                                addrtuplelist.append((ip, port))
+
+                    line = f.readline()
+                #  print addrtuplelist
+                multhreadassign(addrtuplelist)
+        except KeyboardInterrupt:
+            print 'out'
+            sys.exit()
+        except:
+            print "No such file! Please check your input!" 
+            sys.exit()
         
     else:
         if checkip(args.ip):
@@ -139,16 +151,20 @@ if __name__ == '__main__':
                 #  print portlist
                 for port in portlist:
                     addrtuplelist.append((ip, port))
+                #  print addrtuplelist
                 multhreadassign(addrtuplelist)
 
             else:
                 print "Wrong Port number!"
+                sys.exit()
         else:
             print "Wrong IP address!"
-
+            sys.exit()
 
     for ip in resultdic:
+        print '-'*60
         print "Availible ports for " + ip + " are:"
+        print '-'*60
         for port in resultdic[ip]:
             print str(port)
 
