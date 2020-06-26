@@ -167,12 +167,11 @@ if __name__ == '__main__':
                     port = line.split(' ')[1]
                     portlist = parseport(port)
                     if checkip(ip) and portlist:
-                        for port in portlist: # TODO: faster 
-                            if (ip, port) not in addrtuplelist:
-                                addrtuplelist.append((ip, port))
+                        for port in portlist: 
+                            addrtuplelist.append((ip, port))
 
                     line = f.readline()
-                multhreadassign(addrtuplelist)
+                multhreadassign(list(set(addrtuplelist)))
         except KeyboardInterrupt:
             print "exiting"
             sys.exit()
@@ -220,11 +219,14 @@ if __name__ == '__main__':
         f = open('interrupt.txt', 'wb')
         f.write(resultjson + '\n' + exitlist)
         f.close()
-        sys.exit()
+        print 'Progress has been saved in interrupt.txt'
+        print 'The current results are as follows'
     for ip in resultdic:
         print '-'*60
         print "Availible ports for " + ip + " are:"
         print '-'*60
-        for port in resultdic[ip]:
+        tmplist = list(set(resultdic[ip]))
+
+        for port in tmplist:
             print str(port)
 
