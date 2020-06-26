@@ -9,16 +9,17 @@ import re
 import threading
 import os
 import sys
+import json
+import base64
+import yaml
 
-#  TODO: output
-#  TODO: record
 #  TODO: exception
 
 #  store the result
 resultdic = {}
 
 #  port number for each thread
-portnumeachthread = 20
+portnumeachthread = 200
 
 #  thread list
 threads = []
@@ -26,6 +27,11 @@ threads = []
 lock = threading.Lock()
 
 timeout = 0.5
+
+#  check interrupt
+is_exit = False
+
+exittuplelist = []
 
 def checkip(ip):
     if re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", ip):
@@ -47,60 +53,91 @@ def parseport(port):
         return []
 
 def scan(ip, port):
+    global resultdic
     s = socket.socket()
     s.settimeout(timeout)
     if s.connect_ex((ip, port)) == 0:
+        if ip not in resultdic.keys():
+            resultdic[ip] = []
         resultdic[ip].append(port)
-        #  print 'f'
     else:
-        #  TODO: record
         pass
 
 def portscanner(addrtuplelist):
     global resultdic
-    try:
-        for addr in addrtuplelist:
+    global is_exit
+    global exittuplelist
+    record = 0
+    length = len(addrtuplelist)
+    for i in range(length):
+        addr = addrtuplelist[i]
+        if is_exit:
+            break
+        if isinstance(addr, list):
+            addr = (addr[0], addr[1])
+        try:
             s = socket.socket()
             s.settimeout(timeout)
             if s.connect_ex(addr) == 0:
                 lock.acquire()
+                if addr[0] not in resultdic.keys():
+                    resultdic[addr[0]] = []
                 resultdic[addr[0]].append(addr[1])
                 lock.release()
-                #  print 'f'
             else:
-                #  TODO: record
                 pass
-    except KeyboardInterrupt:
-        print "interrupt detected!"
+        except:
+            print 'still error'
+            pass
+
+    if is_exit:
+        lock.acquire()
+        exittuplelist = exittuplelist + addrtuplelist[record:length]
+        lock.release()
 
 
 def multhreadassign(addrtuplelist):
+    global is_exit
+    global portnumeachthread
     print '-'*60
     print "Starting pyscanner...."
     print '-'*60
     tuplelength = len(addrtuplelist)
     threadnum = tuplelength / portnumeachthread 
-    if threadnum == 0:
-        for addr in addrtuplelist:
-            scan(addr[0], addr[1])
-    else:
-        for i in range(0, threadnum):
-            startnum = i * portnumeachthread
-            if startnum+20 <= tuplelength:
-                subtuplelist = addrtuplelist[startnum:startnum+20]
-                t = threading.Thread(target=portscanner, args=(subtuplelist,))
-                t.setDaemon(True)
-                threads.append(t)
-                t.start()
-            else:
-                subtuplelist = addrtuplelist[startnum:tuplelength-1]
-                t = threading.Thread(target=portscanner, args=(addrtuplelist,))
-                t.setDaemon(True)
-                threads.append(t)
-                t.start()
+    try:
+        if threadnum == 0:
+            for addr in addrtuplelist:
+                scan(addr[0], addr[1])
+        else:
+            for i in range(0, threadnum):
+                startnum = i * portnumeachthread
+                if startnum+portnumeachthread <= tuplelength:
+                    subtuplelist = addrtuplelist[startnum:startnum+portnumeachthread]
+                    t = threading.Thread(target=portscanner, args=(subtuplelist,))
+                    t.setDaemon(True)
+                    threads.append(t)
+                    t.start()
+                else:
+                    subtuplelist = addrtuplelist[startnum:tuplelength-1]
+                    t = threading.Thread(target=portscanner, args=(addrtuplelist,))
+                    t.setDaemon(True)
+                    threads.append(t)
+                    t.start()
 
-        for t in threads:
-            t.join()
+            for t in threads:
+                t.join()
+
+    except KeyboardInterrupt:
+        print "detected KeyboardInterrupt"
+        is_exit = True
+        alive = True
+        while alive:
+            detected = False
+            for t in threads:
+                if t.isAlive():
+                    detected = True
+            alive = detected
+            
 
 
 if __name__ == '__main__':
@@ -116,9 +153,10 @@ if __name__ == '__main__':
     normal_parser.add_argument('ip', type=str, help='IP address')
     normal_parser.add_argument('port', type=str, help='Port number')
 
+    interrupt_parser = subs.add_parser('continue', help='continue last scan')
+    interrupt_parser.add_argument('intfile', type=str, help='input the file log')
     args = parser.parse_args()
 
-    #  print args
     if 'filename' in args:
         try:
             with open(args.filename, 'r') as f:
@@ -129,33 +167,28 @@ if __name__ == '__main__':
                     port = line.split(' ')[1]
                     portlist = parseport(port)
                     if checkip(ip) and portlist:
-                        if ip not in resultdic.keys():
-                            resultdic[ip] = []
                         for port in portlist: # TODO: faster 
                             if (ip, port) not in addrtuplelist:
                                 addrtuplelist.append((ip, port))
 
                     line = f.readline()
-                #  print addrtuplelist
                 multhreadassign(addrtuplelist)
         except KeyboardInterrupt:
-            print 'out'
+            print "exiting"
             sys.exit()
         except:
-            print "No such file! Please check your input!" 
+            print "File error! Please check again!"
             sys.exit()
         
-    else:
+    elif 'ip' in args:
         if checkip(args.ip):
             ip = args.ip
             resultdic[ip] = []
             portlist = parseport(args.port)
             if portlist:
                 addrtuplelist = []
-                #  print portlist
                 for port in portlist:
                     addrtuplelist.append((ip, port))
-                #  print addrtuplelist
                 multhreadassign(addrtuplelist)
 
             else:
@@ -165,6 +198,29 @@ if __name__ == '__main__':
             print "Wrong IP address!"
             sys.exit()
 
+    else:
+        try:
+            with open(args.intfile, 'rb') as f:
+                resultdic = yaml.safe_load(f.readline())
+                addrtuplelist = yaml.safe_load(f.readline())
+                print resultdic
+                multhreadassign(addrtuplelist)
+        except KeyboardInterrupt:
+            print "exiting"
+            sys.exit()
+        except:
+            print "File error! Please check again!"
+            sys.exit()
+
+
+
+    if is_exit:
+        resultjson = json.dumps(resultdic, ensure_ascii=False)
+        exitlist = json.dumps(exittuplelist, ensure_ascii=False)
+        f = open('interrupt.txt', 'wb')
+        f.write(resultjson + '\n' + exitlist)
+        f.close()
+        sys.exit()
     for ip in resultdic:
         print '-'*60
         print "Availible ports for " + ip + " are:"
